@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::constants::{ANGLE_LEFT, ANGLE_RIGHT, LEAF_COUNT, LEAF_GAP, PAGE_HEIGHT, PAGE_WIDTH};
+use crate::constants::{ANGLE_LEFT, ANGLE_RIGHT, BLOCK_THICKNESS, cover};
 use crate::types::{Leaf, LeafMode, LeafState};
 
 /// Where the cursor ray meets the top of the page stacks.
@@ -13,7 +13,7 @@ pub struct BookHit {
 
 impl BookHit {
     pub fn is_on_page(&self) -> bool {
-        self.point.x.abs() <= PAGE_WIDTH && self.point.z.abs() <= PAGE_HEIGHT / 2.0
+        self.point.x.abs() <= cover::BOARD_WIDTH && self.point.z.abs() <= cover::BOARD_HEIGHT / 2.0
     }
 }
 
@@ -21,7 +21,7 @@ pub fn cursor_hit(window: &Window, camera: &(&Camera, &GlobalTransform)) -> Opti
     let (camera, transform) = *camera;
     let cursor = window.cursor_position()?;
     let ray = camera.viewport_to_world(transform, cursor).ok()?;
-    let top = Vec3::Y * (LEAF_COUNT as f32 * LEAF_GAP);
+    let top = Vec3::Y * BLOCK_THICKNESS;
     ray.plane_intersection_point(top, InfinitePlane3d::new(Vec3::Y))
         .map(|point| BookHit { point })
 }

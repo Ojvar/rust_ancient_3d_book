@@ -5,43 +5,43 @@
 //! into fixed sub-steps, so the result does not depend on the frame rate.
 
 use crate::constants::{ANGLE_LEFT, ANGLE_RIGHT, physics::*};
-use crate::types::{LeafMode, LeafState};
+use crate::types::{LeafMode, LeafState, PhysicsParams};
 
 /// Advances a leaf by `dt` seconds and returns its new state.
-pub fn step_leaf(state: LeafState, dt: f32) -> LeafState {
+pub fn step_leaf(state: LeafState, params: &PhysicsParams, dt: f32) -> LeafState {
     if state.mode == LeafMode::Resting {
         return state;
     }
     let dt = dt.clamp(0.0, MAX_DT);
     let steps = (dt / SUB_STEP).ceil().max(1.0) as usize;
     let h = dt / steps as f32;
-    (0..steps).fold(state, |s, _| sub_step(s, h))
+    (0..steps).fold(state, |s, _| sub_step(s, params, h))
 }
 
-fn sub_step(state: LeafState, h: f32) -> LeafState {
-    let velocity = state.velocity + acceleration(&state) * h;
+fn sub_step(state: LeafState, params: &PhysicsParams, h: f32) -> LeafState {
+    let velocity = state.velocity + acceleration(&state, params) * h;
     let angle = state.angle + velocity * h;
     let moved = LeafState { angle, velocity, ..state };
     let collided = collide_with_stacks(moved);
-    let bent = update_bend(collided, h);
+    let bent = update_bend(collided, params, h);
     settle(bent)
 }
 
 /// Angular acceleration from the cursor spring, or from gravity and air.
-fn acceleration(state: &LeafState) -> f32 {
+fn acceleration(state: &LeafState, p: &PhysicsParams) -> f32 {
     match state.mode {
         LeafMode::Dragged { target, .. } => {
-            DRAG_STIFFNESS * (target - state.angle) - DRAG_DAMPING * state.velocity
+            p.drag_stiffness * (target - state.angle) - p.drag_damping * state.velocity
         }
-        LeafMode::Free => gravity_torque(state.angle) - DAMPING * state.velocity,
+        LeafMode::Free => gravity_torque(state.angle, p.gravity) - p.damping * state.velocity,
         LeafMode::Resting => 0.0,
     }
 }
 
 /// Gravity pulls a lifted page down to the side it leans toward:
 /// negative below 90° (back to the right), positive above (on to the left).
-fn gravity_torque(angle: f32) -> f32 {
-    -GRAVITY * angle.cos()
+fn gravity_torque(angle: f32, gravity: f32) -> f32 {
+    -gravity * angle.cos()
 }
 
 /// Keeps the leaf between the two stacks, bouncing a little on impact.
@@ -59,9 +59,9 @@ fn collide_with_stacks(state: LeafState) -> LeafState {
 }
 
 /// The free edge lags behind the spine when moving fast and sags when lifted.
-fn update_bend(state: LeafState, h: f32) -> LeafState {
-    let sag = DROOP * (2.0 * state.angle).sin();
-    let target = (state.velocity * BEND_PER_SPEED + sag).clamp(-MAX_BEND, MAX_BEND);
+fn update_bend(state: LeafState, p: &PhysicsParams, h: f32) -> LeafState {
+    let sag = p.droop * (2.0 * state.angle).sin();
+    let target = (state.velocity * p.bend_per_speed + sag).clamp(-p.max_bend, p.max_bend);
     let blend = 1.0 - (-BEND_RESPONSE * h).exp();
     LeafState {
         bend: state.bend + (target - state.bend) * blend,
@@ -88,6 +88,7 @@ fn settle(state: LeafState) -> LeafState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::{COVER_PHYSICS, PAPER_PHYSICS};
     use std::f32::consts::FRAC_PI_2;
 
     fn free(angle: f32, velocity: f32) -> LeafState {
@@ -96,7 +97,7 @@ mod tests {
 
     fn run(mut s: LeafState, seconds: f32) -> LeafState {
         for _ in 0..(seconds * 60.0) as usize {
-            s = step_leaf(s, 1.0 / 60.0);
+            s = step_leaf(s, &PAPER_PHYSICS, 1.0 / 60.0);
         }
         s
     }
@@ -120,8 +121,17 @@ mod tests {
         let at_60 = run(free(1.0, 2.0), 0.5);
         let mut at_240 = free(1.0, 2.0);
         for _ in 0..120 {
-            at_240 = step_leaf(at_240, 1.0 / 240.0);
+            at_240 = step_leaf(at_240, &PAPER_PHYSICS, 1.0 / 240.0);
         }
         assert!((at_60.angle - at_240.angle).abs() < 1e-3);
+    }
+
+    #[test]
+    fn cover_never_bends() {
+        let mut s = free(1.0, 5.0);
+        for _ in 0..60 {
+            s = step_leaf(s, &COVER_PHYSICS, 1.0 / 60.0);
+        }
+        assert_eq!(s.bend, 0.0);
     }
 }

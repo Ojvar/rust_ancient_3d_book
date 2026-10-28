@@ -1,34 +1,42 @@
 //! Camera, lights and a small orbit control (right mouse + wheel).
 
+mod environment;
+mod screenshot;
+
 use bevy::{
+    camera::Hdr,
+    core_pipeline::tonemapping::Tonemapping,
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
+    post_process::bloom::Bloom,
     prelude::*,
 };
 
-use crate::constants::camera::*;
+use crate::constants::{camera::*, environment::BACKGROUND};
 use crate::types::{DragState, OrbitCamera};
 
 pub struct ScenePlugin;
 
 impl Plugin for ScenePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ClearColor(Color::srgb(0.12, 0.13, 0.16)))
-            .add_systems(Startup, (spawn_camera, spawn_lights))
+        let (r, g, b) = BACKGROUND;
+        app.insert_resource(ClearColor(Color::srgb(r, g, b)))
+            .add_plugins(screenshot::ScreenshotPlugin)
+            .add_systems(Startup, (spawn_camera, environment::spawn_environment))
             .add_systems(Update, orbit_camera);
     }
 }
 
+/// HDR camera with filmic tone mapping and a soft bloom for the flame.
 fn spawn_camera(mut commands: Commands) {
-    let orbit = OrbitCamera { yaw: 0.0, pitch: PITCH, distance: DISTANCE };
-    commands.spawn((Camera3d::default(), orbit_transform(&orbit), orbit));
-}
-
-fn spawn_lights(mut commands: Commands) {
+    let orbit = OrbitCamera { yaw: YAW, pitch: PITCH, distance: DISTANCE };
     commands.spawn((
-        DirectionalLight { illuminance: 6_000.0, shadow_maps_enabled: true, ..default() },
-        Transform::from_xyz(2.0, 6.0, 3.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera3d::default(),
+        Hdr,
+        Tonemapping::TonyMcMapface,
+        Bloom::NATURAL,
+        orbit_transform(&orbit),
+        orbit,
     ));
-    commands.insert_resource(GlobalAmbientLight { brightness: 400.0, ..default() });
 }
 
 /// Right drag orbits, the wheel zooms. Disabled while a page is held.
@@ -55,5 +63,7 @@ fn orbit_camera(
 
 fn orbit_transform(orbit: &OrbitCamera) -> Transform {
     let offset = Quat::from_euler(EulerRot::YXZ, orbit.yaw, -orbit.pitch, 0.0) * Vec3::Z;
-    Transform::from_translation(offset * orbit.distance).looking_at(Vec3::ZERO, Vec3::Y)
+    let (x, y, z) = FOCUS;
+    let focus = Vec3::new(x, y, z);
+    Transform::from_translation(focus + offset * orbit.distance).looking_at(focus, Vec3::Y)
 }
