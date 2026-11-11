@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use super::leaf_height;
+use super::{leaf_height, rounded::rounded_slab};
 use crate::constants::{COVER_INDEX, cover::*};
 use crate::types::{BookMaterials, Leaf, LeafKind, LeafMode, LeafState};
 
@@ -44,17 +44,19 @@ pub fn spawn_cover(
         Transform::from_translation(board_center(-1.0)),
     ));
     commands.spawn(spine(&mut meshes, &materials));
+    for bundle in spine_bands(&mut meshes, &materials) {
+        commands.spawn(bundle);
+    }
 }
 
 fn closed_cover() -> LeafState {
     LeafState { angle: 0.0, velocity: 0.0, bend: 0.0, grab_z: 0.0, mode: LeafMode::Resting }
 }
 
-/// Boards need tangents for the leather normal map.
+/// A board with rounded corners and worn, rounded rims (with tangents for
+/// the leather normal map).
 fn board_mesh() -> Mesh {
-    Mesh::from(Cuboid::new(BOARD_WIDTH, THICKNESS, BOARD_HEIGHT))
-        .with_generated_tangents()
-        .expect("cuboid has normals and UVs")
+    rounded_slab(Vec3::new(BOARD_WIDTH, THICKNESS, BOARD_HEIGHT), BOARD_CORNER, BOARD_EDGE)
 }
 
 /// `side` = 1 puts the board above its hinge (front), -1 below it (back).
@@ -72,18 +74,85 @@ fn endpaper(meshes: &mut Assets<Mesh>, materials: &BookMaterials) -> impl Bundle
     )
 }
 
+/// One piece of the spine: the leather body or a band/gold line at `z`.
+/// The spine always wraps the book's back edge, from under the back board to
+/// the top of the front board, so it is re-fitted whenever the cover moves.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SpinePart {
+    z: f32,
+    body: bool,
+}
+
 fn spine(meshes: &mut Assets<Mesh>, materials: &BookMaterials) -> impl Bundle {
+    let part = SpinePart { z: 0.0, body: true };
     (
-        Mesh3d(meshes.add(Cylinder::new(SPINE_RADIUS, BOARD_HEIGHT))),
+        part,
+        Mesh3d(meshes.add(Cylinder::new(1.0, BOARD_HEIGHT))),
         MeshMaterial3d(materials.leather.clone()),
-        Transform::from_xyz(0.0, -THICKNESS * 0.75, 0.0)
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        spine_transform(part, closed_cover_height()),
     )
 }
 
+/// Raised leather bands around the spine, each framed by two gold lines.
+fn spine_bands(meshes: &mut Assets<Mesh>, materials: &BookMaterials) -> Vec<impl Bundle> {
+    // Unit tori, scaled to the spine's oval; the tube is sized for the
+    // spine's depth so it stays round where it shows.
+    let band = meshes.add(Torus { minor_radius: SPINE_BAND_RADIUS / SPINE_RADIUS, major_radius: 1.0 });
+    let line = meshes.add(Torus { minor_radius: SPINE_LINE_RADIUS / SPINE_RADIUS, major_radius: 1.0 });
+    let piece = |mesh: &Handle<Mesh>, material: &Handle<StandardMaterial>, z: f32| {
+        let part = SpinePart { z, body: false };
+        (part, Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), spine_transform(part, closed_cover_height()))
+    };
+    SPINE_BANDS
+        .iter()
+        .flat_map(|&z| {
+            [
+                piece(&band, &materials.leather, z),
+                piece(&line, &materials.gold, z - SPINE_LINE_OFFSET),
+                piece(&line, &materials.gold, z + SPINE_LINE_OFFSET),
+            ]
+        })
+        .collect()
+}
+
+fn closed_cover_height() -> f32 {
+    leaf_height(&Leaf { index: COVER_INDEX, kind: LeafKind::Cover }, 0.0)
+}
+
+/// An oval tube along z at the hinge (x = 0), reaching from the bottom of the
+/// back board to the top of the front board, `SPINE_RADIUS` deep.
+fn spine_transform(part: SpinePart, cover_height: f32) -> Transform {
+    let (bottom, top) = (-THICKNESS, cover_height + THICKNESS);
+    let half = (top - bottom) / 2.0 + SPINE_MARGIN;
+    // The tube's axis is local y; after the quarter turn local z points down.
+    let scale = if part.body {
+        Vec3::new(SPINE_RADIUS, 1.0, half)
+    } else {
+        Vec3::new(SPINE_RADIUS, SPINE_RADIUS, half)
+    };
+    Transform::from_xyz(0.0, (top + bottom) / 2.0, part.z)
+        .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
+        .with_scale(scale)
+}
+
+/// Keeps the spine wrapped around the book as the front cover opens or closes.
+pub fn fit_spine(
+    covers: Query<(&Leaf, &LeafState), Changed<LeafState>>,
+    mut parts: Query<(&SpinePart, &mut Transform)>,
+) {
+    let Some((leaf, state)) = covers.iter().find(|(leaf, _)| leaf.kind == LeafKind::Cover) else { return };
+    let height = leaf_height(leaf, state.angle);
+    for (part, mut transform) in &mut parts {
+        *transform = spine_transform(*part, height);
+    }
+}
+
+/// Gold fittings with softened edges, like cast and polished brass.
 fn gold_part(meshes: &mut Assets<Mesh>, materials: &BookMaterials, part: Part) -> impl Bundle {
+    let corner = part.size.x.min(part.size.z) * 0.3;
+    let edge = (part.size.y * 0.45).min(corner);
     (
-        Mesh3d(meshes.add(Cuboid::from_size(part.size))),
+        Mesh3d(meshes.add(rounded_slab(part.size, corner, edge))),
         MeshMaterial3d(materials.gold.clone()),
         Transform::from_translation(part.center),
     )

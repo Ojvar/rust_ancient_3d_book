@@ -1,0 +1,11 @@
+Model Information:
+* title:	Three Wax Candles
+* source:	https://sketchfab.com/3d-models/three-wax-candles-cded1dc39e624077a43ab5c8c7cf1d0a
+* author:	Rudy (https://sketchfab.com/Rudy27)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Three Wax Candles" (https://sketchfab.com/3d-models/three-wax-candles-cded1dc39e624077a43ab5c8c7cf1d0a) by Rudy (https://sketchfab.com/Rudy27) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

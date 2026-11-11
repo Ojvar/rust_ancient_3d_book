@@ -1,5 +1,6 @@
 //! Optional screenshot mode for docs: `BOOK3D_SCREENSHOT=docs/screenshot.png cargo run`.
-//! It flicks the cover open, saves one frame and quits.
+//! It flicks the cover open (unless `BOOK3D_SCREENSHOT_CLOSED` is set),
+//! saves one frame and quits.
 
 use bevy::{
     prelude::*,
@@ -31,7 +32,7 @@ fn run_screenshot(
 ) {
     *frame += 1;
     match *frame {
-        2 => open_cover(&mut leaves),
+        2 if std::env::var(CLOSED_ENV_VAR).is_err() => open_cover(&mut leaves),
         SCREENSHOT_FRAME => {
             commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.0.clone()));
         }

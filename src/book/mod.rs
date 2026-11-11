@@ -5,6 +5,7 @@ mod deformation;
 mod materials;
 mod mesh;
 mod page_block;
+mod rounded;
 mod spawn;
 
 use bevy::prelude::*;
@@ -25,7 +26,7 @@ impl Plugin for BookPlugin {
         )
         .add_systems(
             PostUpdate,
-            (bend_paper_meshes, rotate_covers, lift_leaves, page_block::resize_page_block),
+            (bend_paper_meshes, rotate_covers, lift_leaves, page_block::resize_page_block, cover::fit_spine),
         );
     }
 }

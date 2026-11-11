@@ -90,6 +90,8 @@ pub struct DragState {
 /// Orbit camera parameters.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct OrbitCamera {
+    /// Point the camera orbits around and looks at (moved by panning).
+    pub focus: Vec3,
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,

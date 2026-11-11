@@ -18,6 +18,20 @@ pub const PAGE_HEIGHT: f32 = 2.8;
 pub const SEGMENTS_X: usize = 32;
 pub const SEGMENTS_Z: usize = 12;
 
+/// Resting shape of real paper (radians of extra tilt, fractions of width).
+/// Near the spine the page arches up out of the gutter and settles again
+/// within `GUTTER_SPAN` of the width.
+pub const GUTTER_ANGLE: f32 = 0.24;
+pub const GUTTER_SPAN: f32 = 0.32;
+/// A soft, low wave across the sheet and a lift of the outer corners.
+pub const PAPER_RIPPLE: f32 = 0.045;
+pub const CORNER_CURL: f32 = 0.11;
+/// How much light passes through a sheet (candle glow seen through paper).
+pub const PAPER_TRANSLUCENCY: f32 = 0.22;
+/// Strength and resolution of the procedural paper-fibre normal map.
+pub const PAPER_GRAIN: f32 = 0.35;
+pub const PAPER_GRAIN_SIZE: u32 = 512;
+
 /// Height of a loose leaf above the page block below it (avoids z-fighting).
 pub const LEAF_GAP: f32 = 0.004;
 /// Total thickness of the page block (all the paper of the tome).
@@ -37,7 +51,19 @@ pub mod cover {
     pub const OVERHANG: f32 = 0.09;
     pub const BOARD_WIDTH: f32 = PAGE_WIDTH + OVERHANG;
     pub const BOARD_HEIGHT: f32 = PAGE_HEIGHT + 2.0 * OVERHANG;
+    /// How far the rounded spine bulges out past the hinge.
     pub const SPINE_RADIUS: f32 = 0.14;
+    /// Extra height so the spine just covers the board rims.
+    pub const SPINE_MARGIN: f32 = 0.004;
+    /// Rounding of the board outline and of its rims.
+    pub const BOARD_CORNER: f32 = 0.045;
+    pub const BOARD_EDGE: f32 = 0.022;
+    /// Raised bands across the spine (as on a hand-bound book), with gold
+    /// tooling lines beside each one.
+    pub const SPINE_BANDS: [f32; 4] = [-0.95, -0.32, 0.32, 0.95];
+    pub const SPINE_BAND_RADIUS: f32 = 0.022;
+    pub const SPINE_LINE_RADIUS: f32 = 0.006;
+    pub const SPINE_LINE_OFFSET: f32 = 0.06;
 
     /// Raised gold frame on the front board.
     pub const FRAME_INSET: f32 = 0.14;
@@ -67,9 +93,11 @@ pub mod materials {
     /// sRGB colours.
     pub const GOLD: (f32, f32, f32) = (0.86, 0.64, 0.27);
     pub const GOLD_ROUGHNESS: f32 = 0.32;
+    /// Waxed leather: a soft sheen layer over the rough hide.
+    pub const LEATHER_CLEARCOAT: f32 = 0.4;
+    pub const LEATHER_CLEARCOAT_ROUGHNESS: f32 = 0.5;
     pub const PAPER_ROUGHNESS: f32 = 0.95;
     pub const WOOD_ROUGHNESS: f32 = 0.7;
-    pub const WAX: (f32, f32, f32) = (0.93, 0.88, 0.74);
     /// Linear emissive colour of the flame (bright, so it blooms).
     pub const FLAME: (f32, f32, f32) = (18.0, 7.0, 1.5);
 }
@@ -77,15 +105,28 @@ pub mod materials {
 pub mod environment {
     pub const TABLE_SIZE: (f32, f32, f32) = (14.0, 0.3, 9.0);
     pub const CANDLE_POSITION: (f32, f32) = (-3.4, -1.9);
-    pub const CANDLE_HEIGHT: f32 = 1.0;
-    pub const CANDLE_RADIUS: f32 = 0.13;
+    /// glTF candle model (three wax candles) and its scale in world units.
+    pub const CANDLE_MODEL: &str = "candle/scene.gltf";
+    pub const CANDLE_SCALE: f32 = 1.2;
+    /// Each candle in model space (Z-up): wick x, y, wick top z, wax rim top z.
+    /// Tallest first; it is the one that casts shadows.
+    pub const WICKS: [(f32, f32, f32, f32); 3] =
+        [(0.259, 0.067, 0.832, 0.901), (-0.285, 0.184, 0.66, 0.73), (0.009, -0.089, 0.486, 0.466)];
     pub const FLAME_RADIUS: f32 = 0.05;
-    pub const LIGHT_COLOR: (f32, f32, f32) = (1.0, 0.68, 0.38);
+    pub const LIGHT_COLOR: (f32, f32, f32) = (1.0, 0.58, 0.24);
     pub const LIGHT_INTENSITY: f32 = 40_000.0;
     pub const LIGHT_RADIUS: f32 = 0.12;
-    pub const FILL_ILLUMINANCE: f32 = 450.0;
-    pub const AMBIENT_BRIGHTNESS: f32 = 60.0;
+    pub const FILL_ILLUMINANCE: f32 = 750.0;
+    pub const AMBIENT_BRIGHTNESS: f32 = 110.0;
     pub const BACKGROUND: (f32, f32, f32) = (0.02, 0.015, 0.01);
+    /// Candle flicker: how much the brightness wavers (fraction) and how far
+    /// the light and flame sway (world units), plus the base flicker speed.
+    pub const FLICKER_AMOUNT: f32 = 0.18;
+    pub const FLICKER_SWAY: f32 = 0.012;
+    pub const FLICKER_SPEED: f32 = 1.0;
+    /// Bright inner core of the flame (linear emissive) and its size.
+    pub const FLAME_CORE: (f32, f32, f32) = (40.0, 30.0, 14.0);
+    pub const FLAME_CORE_SCALE: f32 = 0.45;
 }
 
 pub mod physics {
@@ -126,9 +167,9 @@ pub const COVER_PHYSICS: PhysicsParams = PhysicsParams {
 };
 
 pub mod camera {
-    pub const DISTANCE: f32 = 6.4;
-    pub const PITCH: f32 = 0.95;
-    pub const YAW: f32 = 0.22;
+    pub const DISTANCE: f32 = 4.2;
+    pub const PITCH: f32 = 0.5;
+    pub const YAW: f32 = -1.1;
     /// Point the camera looks at (slightly above the table).
     pub const FOCUS: (f32, f32, f32) = (0.0, 0.1, 0.15);
     pub const ORBIT_SPEED: f32 = 0.005;
@@ -137,12 +178,27 @@ pub mod camera {
     pub const MAX_DISTANCE: f32 = 12.0;
     pub const MIN_PITCH: f32 = 0.2;
     pub const MAX_PITCH: f32 = 1.5;
+    /// Pan speed per pixel of mouse motion, scaled by the camera distance.
+    pub const PAN_SPEED: f32 = 0.0012;
+    /// Keyboard pan speed (fraction of the camera distance per second).
+    pub const KEY_PAN_SPEED: f32 = 0.6;
+    /// Keyboard orbit speed (rad/s) and zoom speed (units/s).
+    pub const KEY_ORBIT_SPEED: f32 = 1.4;
+    pub const KEY_ZOOM_SPEED: f32 = 4.0;
+    /// Touchpads report scrolling in pixels; this many pixels equal one wheel notch.
+    pub const PIXELS_PER_LINE: f32 = 40.0;
+    /// How far the focus may be panned away from the book (x, z).
+    pub const PAN_LIMIT: (f32, f32) = (5.0, 3.5);
+    /// How fast the camera eases toward its target (1/s); higher is snappier.
+    pub const SMOOTHING: f32 = 14.0;
 }
 
 /// Screenshot mode (`BOOK3D_SCREENSHOT=path cargo run`): open the cover,
 /// capture after `SCREENSHOT_FRAME` frames and quit.
 pub mod screenshot {
     pub const ENV_VAR: &str = "BOOK3D_SCREENSHOT";
+    /// Set this too to keep the book closed (shows the front cover).
+    pub const CLOSED_ENV_VAR: &str = "BOOK3D_SCREENSHOT_CLOSED";
     pub const OPEN_COVER_SPEED: f32 = 7.0;
     pub const SCREENSHOT_FRAME: u32 = 300;
     pub const EXIT_FRAME: u32 = 360;

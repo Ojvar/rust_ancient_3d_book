@@ -20,14 +20,22 @@ pub fn build_face_mesh(face: LeafFace) -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, deform_page(flat))
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, face_uvs(face))
     .with_inserted_indices(Indices::U32(face_indices(face)));
-    mesh.compute_normals();
+    refresh_shading(&mut mesh);
     mesh
 }
 
 /// Writes new positions into a face mesh and refreshes its normals.
 pub fn apply_positions(mesh: &mut Mesh, positions: Vec<[f32; 3]>) {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    refresh_shading(mesh);
+}
+
+/// Normals for lighting and tangents for the paper-grain normal map.
+fn refresh_shading(mesh: &mut Mesh) {
     mesh.compute_normals();
+    if let Err(error) = mesh.generate_tangents() {
+        warn!("page tangents: {error}");
+    }
 }
 
 /// The back is seen from below, so its image is mirrored along the width.
