@@ -167,9 +167,9 @@ pub const COVER_PHYSICS: PhysicsParams = PhysicsParams {
 };
 
 pub mod camera {
-    pub const DISTANCE: f32 = 4.2;
-    pub const PITCH: f32 = 0.5;
-    pub const YAW: f32 = -1.1;
+    pub const DISTANCE: f32 = 6.4;
+    pub const PITCH: f32 = 0.95;
+    pub const YAW: f32 = 0.22;
     /// Point the camera looks at (slightly above the table).
     pub const FOCUS: (f32, f32, f32) = (0.0, 0.1, 0.15);
     pub const ORBIT_SPEED: f32 = 0.005;

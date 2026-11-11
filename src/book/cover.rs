@@ -121,8 +121,12 @@ fn closed_cover_height() -> f32 {
 
 /// An oval tube along z at the hinge (x = 0), reaching from the bottom of the
 /// back board to the top of the front board, `SPINE_RADIUS` deep.
+/// The cover's height is its leaf height at its current angle.
 fn spine_transform(part: SpinePart, cover_height: f32) -> Transform {
-    let (bottom, top) = (-THICKNESS, cover_height + THICKNESS);
+    // Opened, the spine sinks a little under the hinge so its bands do not
+    // stick up in the gutter between the left board and the pages.
+    let opened = 1.0 - cover_height / closed_cover_height();
+    let (bottom, top) = (-THICKNESS, cover_height + THICKNESS - opened * 2.5 * SPINE_BAND_RADIUS);
     let half = (top - bottom) / 2.0 + SPINE_MARGIN;
     // The tube's axis is local y; after the quarter turn local z points down.
     let scale = if part.body {
