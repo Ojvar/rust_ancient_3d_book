@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use crate::constants::{
     ANGLE_LEFT, BLOCK_INSET, BLOCK_THICKNESS, PAGE_HEIGHT, PAGE_WIDTH, PAPER_LEAF_COUNT,
 };
-use crate::types::{BookMaterials, Leaf, LeafKind, LeafState, PageBlock};
+use crate::types::{BookMaterials, Leaf, LeafKind, LeafMode, LeafState, PageBlock};
 
 /// Thinner than this a slab is hidden instead of drawn flat.
 const MIN_VISIBLE: f32 = 1e-3;
@@ -22,33 +22,55 @@ pub fn spawn_page_block(
             side,
             Mesh3d(unit.clone()),
             MeshMaterial3d(materials.page_edge.clone()),
-            slab_transform(side, slab_thickness(side, 0)),
+            slab_transform(side, slab_thickness(initial_share(side))),
         ));
     }
 }
 
-/// Counts turned paper leaves and resizes both slabs to match.
+/// Resizes both slabs to the leaves resting on each side.
+///
+/// A leaf that is moving (held or falling) belongs to neither side: the slab
+/// it left must already shrink so the next leaf, which sits on top of the
+/// remaining paper, stays visible instead of being buried inside the slab.
 pub fn resize_page_block(
     leaves: Query<(&Leaf, &LeafState)>,
     mut slabs: Query<(&PageBlock, &mut Transform, &mut Visibility)>,
 ) {
-    let turned = leaves
-        .iter()
-        .filter(|(leaf, state)| leaf.kind == LeafKind::Paper && state.angle > ANGLE_LEFT / 2.0)
-        .count();
+    let resting_on = |side: PageBlock| {
+        leaves
+            .iter()
+            .filter(|(leaf, state)| leaf.kind == LeafKind::Paper && state.mode == LeafMode::Resting)
+            .filter(|(_, state)| resting_side(state.angle) == side)
+            .count()
+    };
+    let counts = (resting_on(PageBlock::Right), resting_on(PageBlock::Left));
     for (side, mut transform, mut visibility) in &mut slabs {
-        let thickness = slab_thickness(*side, turned);
+        let share = match side {
+            PageBlock::Right => counts.0,
+            PageBlock::Left => counts.1,
+        };
+        let thickness = slab_thickness(share);
         transform.set_if_neq(slab_transform(*side, thickness));
         visibility.set_if_neq(if thickness > MIN_VISIBLE { Visibility::Inherited } else { Visibility::Hidden });
     }
 }
 
-fn slab_thickness(side: PageBlock, turned: usize) -> f32 {
-    let share = match side {
-        PageBlock::Right => PAPER_LEAF_COUNT - turned,
-        PageBlock::Left => turned,
-    };
-    BLOCK_THICKNESS * share as f32 / PAPER_LEAF_COUNT as f32
+/// Which stack a resting leaf lies on.
+fn resting_side(angle: f32) -> PageBlock {
+    if angle > ANGLE_LEFT / 2.0 { PageBlock::Left } else { PageBlock::Right }
+}
+
+/// Paper under the leaves on one side: one slice per leaf lying there.
+fn slab_thickness(leaves: usize) -> f32 {
+    BLOCK_THICKNESS * leaves as f32 / PAPER_LEAF_COUNT as f32
+}
+
+/// At startup every paper leaf rests on the right.
+fn initial_share(side: PageBlock) -> usize {
+    match side {
+        PageBlock::Right => PAPER_LEAF_COUNT,
+        PageBlock::Left => 0,
+    }
 }
 
 /// A unit cube scaled to a slab lying on the board on its side of the spine.
